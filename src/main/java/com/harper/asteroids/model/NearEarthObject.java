@@ -1,16 +1,21 @@
 package com.harper.asteroids.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static java.time.DayOfWeek.MONDAY;
+import static java.time.DayOfWeek.SUNDAY;
+import static java.time.temporal.TemporalAdjusters.previousOrSame;
 
 /**
  * Definition for Neo - Near Earth Object
  *
- * TODO: why the h*** must I add this annotation to ignore unknown properties when I set it on ObjectMapper?
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class NearEarthObject {
 
     @JsonProperty("id")
@@ -53,7 +58,17 @@ public class NearEarthObject {
     }
 
     public List<CloseApproachData> getCloseApproachData() {
-        return closeApproachData;
+        List<CloseApproachData> approachData = closeApproachData;
+
+        LocalDate today = LocalDate.now();
+
+        Date monday = Date.from(today.with(previousOrSame(MONDAY)).atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date sunday = Date.from(today.with(previousOrSame(SUNDAY)).atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+        // filter out asteroids not approaching this week
+        approachData = approachData.stream().filter(ad -> ad.getCloseApproachDate().after(monday) && ad.getCloseApproachDate().before(sunday)).collect(Collectors.toList());
+
+        return approachData;
     }
 
     public boolean isSentryObject() {

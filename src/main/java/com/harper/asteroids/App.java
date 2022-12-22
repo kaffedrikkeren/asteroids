@@ -21,6 +21,11 @@ import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import static java.time.DayOfWeek.MONDAY;
+import static java.time.DayOfWeek.SUNDAY;
+import static java.time.temporal.TemporalAdjusters.nextOrSame;
+import static java.time.temporal.TemporalAdjusters.previousOrSame;
+
 /**
  * Main app. Gets the list of closest asteroids from NASA at
  * https://api.nasa.gov/neo/rest/v1/feed?start_date=START_DATE&end_date=END_DATE&api_key=API_KEY
@@ -54,10 +59,14 @@ public class App {
      */
     private void checkForAsteroids() {
         LocalDate today = LocalDate.now();
+
+        LocalDate monday = today.with(previousOrSame(MONDAY));
+        LocalDate sunday = today.with(nextOrSame(SUNDAY));
+
         Response response = client
                 .target(NEO_FEED_URL)
-                .queryParam("start_date",  today.toString())
-                .queryParam("end_date", today.toString())
+                .queryParam("start_date",  monday)
+                .queryParam("end_date", sunday)
                 .queryParam("api_key", API_KEY)
                 .request(MediaType.APPLICATION_JSON)
                 .get();

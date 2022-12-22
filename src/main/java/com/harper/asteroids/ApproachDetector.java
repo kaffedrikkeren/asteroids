@@ -1,5 +1,6 @@
 package com.harper.asteroids;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harper.asteroids.model.NearEarthObject;
 
@@ -9,6 +10,7 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -27,6 +29,8 @@ public class ApproachDetector {
     public ApproachDetector(List<String> ids) {
         this.nearEarthObjectIds = ids;
         this.client = ClientBuilder.newClient();
+        // fix UnrecognizedPropertyException thrown by NearEarthObject if not ignored
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     /**
@@ -35,6 +39,7 @@ public class ApproachDetector {
      */
     public List<NearEarthObject> getClosestApproaches(int limit) {
         List<NearEarthObject> neos = new ArrayList<>(limit);
+
         for(String id: nearEarthObjectIds) {
             try {
                 System.out.println("Check passing of object " + id);
@@ -62,7 +67,6 @@ public class ApproachDetector {
      * @return
      */
     public static List<NearEarthObject> getClosest(List<NearEarthObject> neos, int limit) {
-        //TODO: Should ignore the passes that are not today/this week.
         return neos.stream()
                 .filter(neo -> neo.getCloseApproachData() != null && ! neo.getCloseApproachData().isEmpty())
                 .sorted(new VicinityComparator())
