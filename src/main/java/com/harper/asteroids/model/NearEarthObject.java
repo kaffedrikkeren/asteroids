@@ -4,12 +4,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import static java.time.DayOfWeek.MONDAY;
 import static java.time.DayOfWeek.SUNDAY;
+import static java.time.temporal.TemporalAdjusters.nextOrSame;
 import static java.time.temporal.TemporalAdjusters.previousOrSame;
 
 /**
@@ -60,10 +62,18 @@ public class NearEarthObject {
     public List<CloseApproachData> getCloseApproachData() {
         List<CloseApproachData> approachData = closeApproachData;
 
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
         LocalDate today = LocalDate.now();
 
-        Date monday = Date.from(today.with(previousOrSame(MONDAY)).atStartOfDay(ZoneId.systemDefault()).toInstant());
-        Date sunday = Date.from(today.with(previousOrSame(SUNDAY)).atStartOfDay(ZoneId.systemDefault()).toInstant());
+        LocalDate thisWeekMonday = today.with(previousOrSame(MONDAY));
+        LocalDate thisWeekSunday = today.with(nextOrSame(SUNDAY));
+
+        LocalDate thisWeekStart = LocalDate.parse(thisWeekMonday.toString(), formatter);
+        LocalDate thisWeekEnd = LocalDate.parse(thisWeekSunday.toString(), formatter);
+
+        Date monday = Date.from(thisWeekStart.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date sunday = Date.from(thisWeekEnd.atStartOfDay(ZoneId.systemDefault()).toInstant());
 
         // filter out asteroids not approaching this week
         approachData = approachData.stream().filter(ad -> ad.getCloseApproachDate().after(monday) && ad.getCloseApproachDate().before(sunday)).collect(Collectors.toList());

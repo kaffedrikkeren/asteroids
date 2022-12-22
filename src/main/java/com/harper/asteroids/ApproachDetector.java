@@ -10,8 +10,11 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -40,23 +43,31 @@ public class ApproachDetector {
     public List<NearEarthObject> getClosestApproaches(int limit) {
         List<NearEarthObject> neos = new ArrayList<>(limit);
 
-        for(String id: nearEarthObjectIds) {
-            try {
-                System.out.println("Check passing of object " + id);
-                Response response = client
-                    .target(NEO_URL + id)
-                    .queryParam("api_key", App.API_KEY)
-                    .request(MediaType.APPLICATION_JSON)
-                    .get();
+        int partitionSize = 10; // 10 queries per thread
 
-                NearEarthObject neo = mapper.readValue(response.readEntity(String.class), NearEarthObject.class);
-                neos.add(neo);
-            } catch (IOException e) {
-                System.err.println("Failed scanning for asteroids: " + e);
-            }
+        List<List<String>> partitions = new LinkedList<>();
+        for (int i = 0; i < nearEarthObjectIds.size(); i += partitionSize) {
+            partitions.add(nearEarthObjectIds.subList(i,
+                    Math.min(i + partitionSize, nearEarthObjectIds.size())));
         }
-        System.out.println("Received " + neos.size() + " neos, now sorting");
 
+        ExecutorService es = Executors.newFixedThreadPool(partitions.size()); // n number of threads in parallel
+
+
+        for (List partition: partitions){
+            es.execute(new NEOsCollector(partition, neos));
+        }
+
+        es.shutdown();
+        try {
+            // wait for queries to complete
+            es.awaitTermination(1, TimeUnit.MINUTES);
+        }
+        catch (Exception e){
+            System.err.println(e);
+        }
+
+        System.out.println("Received " + neos.size() + " neos, now sorting");
         return getClosest(neos, limit);
     }
 
@@ -74,4 +85,34 @@ public class ApproachDetector {
                 .collect(Collectors.toList());
     }
 
+    class NEOsCollector implements Runnable{
+
+        List<String> partitions;
+        List<NearEarthObject> neos;
+
+        public NEOsCollector(List<String> partitions, List<NearEarthObject> neos){
+            this.partitions = partitions;
+            this.neos = neos;
+        }
+
+        @Override
+        public void run() {
+            System.out.println("Running " + partitions.size() + " queries");
+            for(String id: partitions) {
+                try {
+                    System.out.println("Check passing of object " + id);
+                    Response response = client
+                            .target(NEO_URL + id)
+                            .queryParam("api_key", App.API_KEY)
+                            .request(MediaType.APPLICATION_JSON)
+                            .get();
+
+                    NearEarthObject neo = mapper.readValue(response.readEntity(String.class), NearEarthObject.class);
+                    neos.add(neo);
+                } catch (IOException e) {
+                    System.err.println("Failed scanning for asteroids: " + e);
+                }
+            }
+        }
+    }
 }
