@@ -1,55 +1,37 @@
 package com.harper.asteroids.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.Date;
+import java.time.LocalDate;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class CloseApproachData {
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
-    @JsonProperty("close_approach_date")
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
-    private Date closeApproachDate;
+public record CloseApproachData(
+        @JsonProperty("close_approach_date")
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd") 
+        LocalDate closeApproachDate,
+        // @JsonProperty("close_approach_date_full")
+        // @JsonDeserialize(using = LocalDateTimeDeserializer.class) 
+        // @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MMM-dd hh:mm") 
+        // LocalDateTime closeApproachDateTime,
+        @JsonProperty("epoch_date_close_approach") 
+        long closeApproachEpochDate,
+        
+        @JsonProperty("relative_velocity") 
+        Velocities relativeVelocity,
+        
+        @JsonProperty("miss_distance") 
+        Distances missDistance,
+        
+        @JsonProperty("orbiting_body")
+        String orbitingBody) {
 
-    @JsonProperty("close_approach_date_full")
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MMM-dd hh:mm")
-    private Date closeApproachDateTime;
-
-    @JsonProperty("epoch_date_close_approach")
-    private long closeApproachEpochDate;
-
-    @JsonProperty("relative_velocity")
-    private Velocities relativeVelocity;
-
-    @JsonProperty("miss_distance")
-    private Distances missDistance;
-
-    @JsonProperty("orbiting_body")
-    private String orbitingBody;
-
-    public Date getCloseApproachDate() {
-        return closeApproachDate;
-    }
-
-    public Date getCloseApproachDateTime() {
-        return closeApproachDateTime;
-    }
-
-    public long getCloseApproachEpochDate() {
-        return closeApproachEpochDate;
-    }
-
-    public Velocities getRelativeVelocity() {
-        return relativeVelocity;
-    }
-
-    public Distances getMissDistance() {
-        return missDistance;
-    }
-
-    public String getOrbitingBody() {
-        return orbitingBody;
+    public static BiFunction<LocalDate, LocalDate, Predicate<CloseApproachData>> dateFilterPredicate() {
+        return (startDate, endDate) -> {
+            return closestApproachDataObject -> closestApproachDataObject.closeApproachDate().isBefore(endDate)
+                    && closestApproachDataObject.closeApproachDate().isAfter(startDate);
+        };
     }
 }

@@ -2,39 +2,21 @@ package com.harper.asteroids.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public class Distances implements Comparable<Distances> {
+public record Distances(
+        @JsonProperty("astronomical") 
+        Double astronomical,
 
-    @JsonProperty("astronomical")
-    private Double astronomical;
+        @JsonProperty("lunar") 
+        Double lunar,
 
-    @JsonProperty("lunar")
-    private Double lunar;
-
-    @JsonProperty("kilometers")
-    private Double kilometers;
-
-    @JsonProperty("miles")
-    private Double miles;
-
-    public Double getAstronomical() {
-        return astronomical;
-    }
-
-    public Double getLunar() {
-        return lunar;
-    }
-
-    public Double getKilometers() {
-        return kilometers;
-    }
-
-    public Double getMiles() {
-        return miles;
-    }
-
+        @JsonProperty("kilometers") 
+        Double kilometers,
+        
+        @JsonProperty("miles") 
+        Double miles) implements Comparable<Distances> {
 
     @Override
     public int compareTo(Distances other) {
-        return kilometers.compareTo(other.getKilometers());
+        return kilometers.compareTo(other.kilometers());
     }
 }

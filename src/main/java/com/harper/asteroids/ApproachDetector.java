@@ -1,15 +1,18 @@
 package com.harper.asteroids;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.harper.asteroids.client.NasaClient;
+import com.harper.asteroids.model.CloseApproachData;
+import com.harper.asteroids.model.DateInterval;
 import com.harper.asteroids.model.NearEarthObject;
+import com.harper.asteroids.utils.DateUtils;
+import com.harper.asteroids.utils.EnvUtils;
+import com.harper.asteroids.utils.VicinityComparator;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import java.io.IOException;
-import java.util.ArrayList;
+import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -19,55 +22,88 @@ import java.util.stream.Collectors;
  * Alerts if someone is possibly hazardous.
  */
 public class ApproachDetector {
-    private static final String NEO_URL = "https://api.nasa.gov/neo/rest/v1/neo/";
-    private List<String> nearEarthObjectIds;
-    private Client client;
-    private ObjectMapper mapper = new ObjectMapper();
+        private static final NasaClient nasaClient = new NasaClient(
+                        EnvUtils.getEnvOrDefault("API_KEY", "DEMO_KEY"));
 
-    public ApproachDetector(List<String> ids) {
-        this.nearEarthObjectIds = ids;
-        this.client = ClientBuilder.newClient();
-    }
+        /**
+         * Scan space for asteroids close to earth
+         */
+        public static void checkForAsteroids(boolean filterClosestApproachesThisWek) throws Exception {
 
-    /**
-     * Get the n closest approaches in this period
-     * @param limit - n
-     */
-    public List<NearEarthObject> getClosestApproaches(int limit) {
-        List<NearEarthObject> neos = new ArrayList<>(limit);
-        for(String id: nearEarthObjectIds) {
-            try {
-                System.out.println("Check passing of object " + id);
-                Response response = client
-                    .target(NEO_URL + id)
-                    .queryParam("api_key", App.API_KEY)
-                    .request(MediaType.APPLICATION_JSON)
-                    .get();
+                List<NearEarthObject> neos = nasaClient
+                                .getFeedOfClosestNearEarthObjects(LocalDate.now(), LocalDate.now())
+                                .getAllObjectIds()
+                                .parallelStream()
+                                .map(nasaClient::getNearEarthObject)
+                                .filter(neo -> neo != null)
+                                .collect(Collectors.toList());
 
-                NearEarthObject neo = mapper.readValue(response.readEntity(String.class), NearEarthObject.class);
-                neos.add(neo);
-            } catch (IOException e) {
-                System.err.println("Failed scanning for asteroids: " + e);
-            }
+                Predicate<CloseApproachData> dateFilterPredicate = null;
+                if (filterClosestApproachesThisWek) {
+                        DateInterval commingWeekInterval = DateUtils.getCommingWeekInterval();
+                        dateFilterPredicate = CloseApproachData.dateFilterPredicate().apply(
+                                        commingWeekInterval.startDate(),
+                                        commingWeekInterval.endDate());
+                        System.out.println("Finding close approach data for comming week, from date: "
+                                        + commingWeekInterval.startDate() + " to date:"
+                                        + commingWeekInterval.endDate());
+                }
+
+                List<NearEarthObject> nearEarthObjects = getClosestApproaches(
+                                neos,
+                                10,
+                                Optional.ofNullable(dateFilterPredicate));
+
+                printNearthEarthObjects(nearEarthObjects);
+
         }
-        System.out.println("Received " + neos.size() + " neos, now sorting");
 
-        return getClosest(neos, limit);
-    }
+        public static List<NearEarthObject> getClosestApproaches(List<NearEarthObject> neos, int limit,
+                        Optional<Predicate<CloseApproachData>> closeApproachPredicate) {
+                Predicate<CloseApproachData> p = closeApproachPredicate.orElse(v -> true);
 
-    /**
-     * Get the closest passing.
-     * @param neos the NearEarthObjects
-     * @param limit
-     * @return
-     */
-    public static List<NearEarthObject> getClosest(List<NearEarthObject> neos, int limit) {
-        //TODO: Should ignore the passes that are not today/this week.
-        return neos.stream()
-                .filter(neo -> neo.getCloseApproachData() != null && ! neo.getCloseApproachData().isEmpty())
-                .sorted(new VicinityComparator())
-                .limit(limit)
-                .collect(Collectors.toList());
-    }
+                return neos.stream()
+                                .filter(neo -> neo.closeApproachData() != null && !neo.closeApproachData().isEmpty())
+                                .map(neo -> {
+                                        List<CloseApproachData> filteredApproachData = neo.closeApproachData()
+                                                        .stream()
+                                                        .filter(p)
+                                                        .collect(Collectors.toList());
+                                        return new NearEarthObject(
+                                                        neo.id(),
+                                                        neo.name(),
+                                                        neo.nplUrl(),
+                                                        neo.absoluteMagnitude(),
+                                                        neo.potentiallyHazardous(),
+                                                        filteredApproachData,
+                                                        neo.isSentryObject());
+                                })
+                                .sorted(new VicinityComparator())
+                                .limit(limit)
+                                .collect(Collectors.toList());
+        }
+
+        private static void printNearthEarthObjects(List<NearEarthObject> nearEarthObjects) {
+                System.out.println("Hazard?   Distance(km)    When                             Name");
+                System.out.println("----------------------------------------------------------------------");
+                nearEarthObjects.forEach(neo -> {
+                        Optional<CloseApproachData> closestPass = neo.closeApproachData().stream()
+                                        .min(Comparator.comparing(CloseApproachData::missDistance));
+
+                        if (closestPass.isEmpty())
+                                return;
+
+                        System.out.println(formatNearthObject(neo, closestPass));
+
+                });
+        }
+
+        private static String formatNearthObject(NearEarthObject neo, Optional<CloseApproachData> closestPass) {
+                return String.format("%s       %12.3f  %s    %s",
+                                (neo.potentiallyHazardous() ? "!!!" : " - "),
+                                closestPass.get().missDistance().kilometers(),
+                                closestPass.get().closeApproachDate(),
+                                neo.name());
+        }
 
 }
