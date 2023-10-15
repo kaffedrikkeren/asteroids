@@ -1,4 +1,4 @@
-#Assignment
+# Assignment
 Your assignment is to 
 1. Review the code. What works and what doesn't?
 2. There are some TODOs in the code: The original developer was frustrated that even if he configured object mapper to NOT fail on unknown properties, decoding did fail. He also had to add the annotation 
